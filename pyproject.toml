@@ -7,10 +7,19 @@ authors = [
     { name = "zhangtony239", email = "zhangtony239@gmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "librosa>=1.0.0",
+    "ruff>=0.16.8",
+    "torch>=2.14.0",
+    "torchaudio>=2.11.0",
+    "transformers>=5.17.0",
+]
 
 [project.scripts]
 voice2note = "voice2note:main"
+
+[[tool.uv.index]]
+url = "https://download.pytorch.org/whl/xpu"
 
 [build-system]
 requires = ["uv_build>=0.12.10,<0.13.0"]
