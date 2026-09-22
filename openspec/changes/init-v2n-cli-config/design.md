@@ -108,11 +108,12 @@ argparse 的 subparsers 不设 `required`：无子命令时执行流水线（`_c
 
 ### D10: LLM 阶段实现（`llm.py`）
 - 客户端：`openai` SDK（OpenAI 兼容），`base_url=LLM_BASE_URL`、`api_key=LLM_API_KEY`、`model=LLM_MODEL`。
-- 工具：`write_note(content: string)`——模型通过 tool calling 提交笔记 markdown，v2n 执行写入；循环处理 tool_calls 直到模型不再调用或达到轮次上限（防死循环）。
-- 文件名：取 `content` 首个非空行，去除行首 `#` 与空白，清理文件系统非法字符 `\ / : * ? " < > |`，截断到 `MAX_TITLE_LENGTH`，扩展名 `.md`；写入 `NOTE_PATH`（mkdir parents）。
+- 工具：`write_note(content: string)`——模型通过 tool calling 提交笔记 markdown，v2n 执行写入；循环处理 tool_calls 直到模型给出最终答复或达到轮次上限（防死循环）。
+- 用户消息（openai 库 v1 兼容内容块数组）：STT 原稿以 file 内容块发送——`{"type": "file", "file": {"filename": "transcript.md", "file_data": "data:text/markdown;base64,<b64>"}}`（单请求，不依赖 files API）；CLI 提供 `PROMPT` 时追加独立 text 内容块 `{"type": "text", "text": "用户指示：{PROMPT}"}`，与原稿不拼接。
+- 文件名：提供 `PROMPT` 时直接由 PROMPT 确定（清理非法字符 `\ / : * ? " < > |`、截断 `MAX_TITLE_LENGTH`，确定性命名）；未提供时回退取 `content` 首个非空行（去行首 `#` 与空白）同样清理截断；扩展名 `.md`；写入 `NOTE_PATH`（mkdir parents）。
 
 ### D11: 流水线编排（`cli.py` `_cmd_run`）
-`load_config` → `discover_voice_files` → 逐个文件：`transcribe` → 原稿落盘 → `generate_note`（tool calling 写笔记）。无匹配文件时输出提示并正常退出；配置错误在处理任何文件前 fail-fast。
+`load_config` → `discover_voice_files` → 逐个文件（tqdm 进度）：`transcribe` → 原稿落盘 → `generate_note`（tool calling 写笔记）。CLI 可选位置参数 `PROMPT` 透传给 `generate_note`。无匹配文件时输出提示并正常退出；配置错误在处理任何文件前 fail-fast。
 
 ## Risks / Trade-offs
 

@@ -31,6 +31,17 @@
 - **WHEN** 用户执行 `v2n config` 创建了模板文件但未填写 `LLM_API_KEY` 等必填项
 - **THEN** `v2n config` 仍正常退出并打印路径，不因字段缺失而报错
 
+### Requirement: v2n 接受可选 PROMPT 参数
+`v2n` SHALL 接受一个可选的位置参数 `PROMPT`（如 `v2n "2.1 title"`）：提供时随 STT 原稿一起发送给 LLM，并直接决定笔记文件名；未提供时回退为取笔记正文首行作文件名。
+
+#### Scenario: 提供 PROMPT
+- **WHEN** 用户执行 `v2n "2.1 title"`
+- **THEN** PROMPT 随 STT 原稿发送给 LLM，且笔记文件名由 PROMPT 清理非法字符并截断到 `MAX_TITLE_LENGTH` 后确定
+
+#### Scenario: 未提供 PROMPT
+- **WHEN** 用户执行 `v2n`（无位置参数）
+- **THEN** 流水线正常运行，笔记文件名取笔记正文首行
+
 ### Requirement: 裸 v2n 运行完整流水线
 不带子命令执行 `v2n` SHALL 运行完整流水线：加载配置 → 发现音频文件 → 对每个文件执行 ASR 转写并保存 STT 原稿 → 调用 LLM 以 tool calling 生成笔记并写入文件。
 
