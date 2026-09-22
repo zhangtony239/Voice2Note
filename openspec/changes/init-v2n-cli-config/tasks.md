@@ -37,8 +37,8 @@
 ## 7. ASR 阶段
 
 - [x] 7.1 实现 `src/voice2note/asr.py`：固定 Fun-ASR-Nano（model_id/revision 写死），按 `TORCH_BACKEND` 加载（bfloat16、`disable_mmap` 透传），懒加载单例；验证：`v2n config` 路径不触发 torch 导入
-- [ ] 7.2 实现 `transcribe(audio_path, config)`：`apply_transcription_request(audio=本地路径, language=ASR_LANGUAGE)` + `generate(max_new_tokens=512, do_sample=False)`，返回转写文本；验证：对一段真实音频产出非空文本
-- [ ] 7.3 原稿落盘：写入 `TRANSCRIPT_PATH/(stem).md`（目录不存在时创建）；验证：转写后目录下出现同名原稿文件
+- [x] 7.2 实现 `transcribe(audio_path, config)`：`apply_transcription_request(audio=本地路径, language=ASR_LANGUAGE)` + `generate(max_new_tokens=512, do_sample=False)`，输入 `.to(TORCH_BACKEND)` 消除设备不匹配警告；验证：HF 示例音频转写出正确文本
+- [x] 7.3 原稿落盘：写入 `TRANSCRIPT_PATH/(stem).md`（目录不存在时创建）；验证：转写后 `.transcripts/en.md` 生成且内容一致
 
 ## 8. LLM 阶段
 

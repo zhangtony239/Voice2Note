@@ -60,7 +60,7 @@ def transcribe(audio_path: Path, config: Config) -> str:
             "audio_kwargs": {"sampling_rate": 16000},
             "text_kwargs": {"padding": True},
         },
-    )
+    ).to(config.torch_backend)
     with torch.inference_mode():
         generated = model.generate(
             **inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False
