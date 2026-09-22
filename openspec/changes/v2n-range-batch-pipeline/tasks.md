@@ -18,6 +18,6 @@
 
 ## 4. 文档与收尾
 
-- [ ] 4.1 在 `README.md` 补充新用法说明（`v2n START-END "TITLE"` 示例与两阶段行为一句话说明）；验证：README 内容可读且与 spec 一致
-- [ ] 4.2 运行 `uv run ruff check` 与 `uv run v2n --help` 确认整体无回归；验证：两条命令均成功且 help 文案展示两个必填位置参数
+- [x] 4.1 在 `README.md` 补充新用法说明（`v2n START-END "TITLE"` 示例与两阶段行为一句话说明）；验证：README 内容可读且与 spec 一致
+- [x] 4.2 运行 `uv run ruff check` 与 `uv run v2n --help` 确认整体无回归；验证：两条命令均成功且 help 文案展示 START-END 必填、TITLE 可选
 - [ ] 4.3 手动端到端验证（需真实配置与音频）：在含 `会议录音 141.aac`、`会议录音 142.aac` 的目录执行 `v2n 141-142 "测试纪要"`，确认先产出两份原稿 md、后产出一篇 `测试纪要.md`，且 LLM 仅收到一次请求；验证：`TRANSCRIPT_PATH` 下两份原稿、`NOTE_PATH` 下一篇笔记
