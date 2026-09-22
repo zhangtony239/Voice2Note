@@ -12,5 +12,6 @@ wheels/
 # ruff
 .ruff_cache/
 
-# debug config.yaml
+# debug files
 config.yaml
+.transcripts/

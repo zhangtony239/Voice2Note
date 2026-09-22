@@ -33,7 +33,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     for audio in tqdm(audio_files, desc="处理音频", unit="file"):
         tqdm.write(f"转写: {audio}")
-        transcript = transcribe(audio, config)
+
+        audio_name = audio.name
+
+        def seg_progress(total: int, _name: str = audio_name):
+            return tqdm(
+                total=total, desc=f"  语句转写 {_name}", unit="seg", leave=False
+            )
+
+        transcript = transcribe(audio, config, progress_factory=seg_progress)
         transcript_path = save_transcript(transcript, audio, config)
         tqdm.write(f"原稿: {transcript_path}")
 

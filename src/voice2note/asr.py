@@ -3,13 +3,14 @@
 模型固定（model_id/revision 写死，不暴露配置），设备与加载方式由配置驱动：
 `TORCH_BACKEND` 决定设备，`DISABLE_MMAP` 生效值透传给模型与 processor 加载。
 
-长音频分块转写：audio tower 位置嵌入上限 2048 帧（约 122 秒），超出会报
-张量尺寸错误；因此按上限分块，并在目标切点附近做音量感知（选最安静的
-窗口下刀），避免切断句子。
+全程语句切分转写：模型按短话语训练，实测 >45s 开始幻觉（>122s 直接超
+位置嵌入上限报错），因此先按静音做语句切分（短句合并到 30s 上限，超长
+语句按音量感知保底硬切），逐句转写后拼接。
 """
 
 from __future__ import annotations
 
+import itertools
 from pathlib import Path
 
 from voice2note.config import Config
@@ -24,11 +25,20 @@ AV_SUFFIXES = frozenset({".aac", ".m4a", ".m4b", ".mp4"})
 #: 采样率（processor 的 audio_kwargs 与分块均按此值）
 SAMPLING_RATE = 16000
 
-#: 单块最大样本数。实测帧率约 16.7 帧/秒（7.18s -> 120 帧），位置嵌入
-#: 上限 2048 帧 ≈ 122.6s；留出余量取 ~112s。
-CHUNK_MAX_SAMPLES = 1_800_000
+#: 单块最大样本数（30 秒）。
+#: 实测（会议录音）：≤30s 转写正确，45s 开始重复幻觉，60s+ 完全乱码，
+#: >122s（位置嵌入 2048 帧）直接报张量尺寸错误——模型按短话语训练，
+#: 有效上限远小于位置嵌入硬上限。全程按语句切分，该值仅作为单条语句
+#: 超长时的保底硬切上限。
+CHUNK_MAX_SAMPLES = 30 * SAMPLING_RATE
 
-#: 音量感知切点的搜索半径与窗口（20ms）
+#: 语句切分参数（能量/VAD 式静音检测）
+_SEGMENT_FRAME_SAMPLES = 320  # 20ms 帧长
+_SEGMENT_MIN_SILENCE_FRAMES = 20  # 静音 ≥0.4s 才视为句界
+_SEGMENT_FLOOR_PERCENTILE = 20  # 噪声地板分位
+_SEGMENT_FLOOR_FACTOR = 4.0  # 阈值 = 地板 × 该系数
+
+#: 保底硬切的音量感知搜索参数（只向前搜索 5s，窗口 20ms）
 _SPLIT_SEARCH_SAMPLES = 5 * SAMPLING_RATE
 _SPLIT_WINDOW_SAMPLES = 320
 
@@ -116,20 +126,64 @@ def _find_split_point(audio, target: int) -> int:
     return lo + int(np.argmin(rms)) * _SPLIT_WINDOW_SAMPLES
 
 
-def split_audio(audio) -> list:
-    """将音频按单块上限分块，切点做音量感知以避免切断句子。"""
-    if len(audio) <= CHUNK_MAX_SAMPLES:
+def segment_audio(audio) -> list:
+    """全程语句切分：按静音找句界，短句合并到 30s 上限。
+
+    1. 20ms 帧级 RMS，自适应阈值（噪声地板 × 系数）判定语音/静音；
+    2. 持续 ≥0.4s 的静音视为句界，在静音中点下刀（不丢音频，覆盖连续）；
+    3. 相邻语句合并到不超过 30s（CHUNK_MAX_SAMPLES）；
+    4. 单条语句仍超 30s 时（如持续发言无停顿），按音量感知保底硬切。
+    """
+    import numpy as np
+
+    n_frames = len(audio) // _SEGMENT_FRAME_SAMPLES
+    if n_frames == 0:
         return [audio]
 
-    chunks = []
-    pos = 0
-    while pos < len(audio):
-        end = pos + CHUNK_MAX_SAMPLES
-        if end < len(audio):
-            end = _find_split_point(audio, end)
-        chunks.append(audio[pos:end])
-        pos = end
-    return chunks
+    frames = audio[: n_frames * _SEGMENT_FRAME_SAMPLES].reshape(
+        n_frames, _SEGMENT_FRAME_SAMPLES
+    )
+    rms = np.sqrt(np.mean(frames.astype("float64") ** 2, axis=1))
+    floor = np.percentile(rms, _SEGMENT_FLOOR_PERCENTILE)
+    threshold = max(floor * _SEGMENT_FLOOR_FACTOR, 1e-4)
+    speech = rms > threshold
+
+    # 句界 = 长静音的中点
+    cuts = [0]
+    silence_start = None
+    for i, is_speech in enumerate(speech):
+        if is_speech:
+            if (
+                silence_start is not None
+                and i - silence_start >= _SEGMENT_MIN_SILENCE_FRAMES
+            ):
+                cuts.append((silence_start + i) // 2 * _SEGMENT_FRAME_SAMPLES)
+            silence_start = None
+        elif silence_start is None:
+            silence_start = i
+    cuts.append(n_frames * _SEGMENT_FRAME_SAMPLES)
+
+    # 合并相邻语句到 30s 上限
+    merged: list[tuple[int, int]] = []
+    seg_start, seg_end = cuts[0], cuts[1]
+    for start, end in itertools.pairwise(cuts[1:]):
+        if end - seg_start <= CHUNK_MAX_SAMPLES:
+            seg_end = end
+        else:
+            merged.append((seg_start, seg_end))
+            seg_start, seg_end = start, end
+    merged.append((seg_start, seg_end))
+
+    # 超长语句按音量感知保底硬切
+    result = []
+    for start, end in merged:
+        pos = start
+        while end - pos > CHUNK_MAX_SAMPLES:
+            cut = _find_split_point(audio, pos + CHUNK_MAX_SAMPLES)
+            result.append(audio[pos:cut])
+            pos = cut
+        result.append(audio[pos:end])
+    return result
 
 
 def _join_transcripts(parts: list[str], language: str) -> str:
@@ -160,10 +214,26 @@ def _transcribe_array(audio, config: Config) -> str:
     return processor.batch_decode(new_tokens, skip_special_tokens=True)[0]
 
 
-def transcribe(audio_path: Path, config: Config) -> str:
-    """将单个音频文件转写为 STT 原稿文本（长音频自动分块）。"""
+def transcribe(audio_path: Path, config: Config, progress_factory=None) -> str:
+    """将单个音频文件转写为 STT 原稿文本（全程语句切分）。
+
+    ``progress_factory(total) -> 更新对象``：语句多于一条时用于 tqdm 进度。
+    """
     audio = load_audio_array(audio_path)
-    parts = [_transcribe_array(chunk, config) for chunk in split_audio(audio)]
+    segments = segment_audio(audio)
+
+    bar = (
+        progress_factory(total=len(segments))
+        if progress_factory and len(segments) > 1
+        else None
+    )
+    parts = []
+    for segment in segments:
+        parts.append(_transcribe_array(segment, config))
+        if bar is not None:
+            bar.update(1)
+    if bar is not None:
+        bar.close()
     return _join_transcripts(parts, config.asr_language)
 
 
