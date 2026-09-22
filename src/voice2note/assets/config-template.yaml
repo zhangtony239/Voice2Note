@@ -8,7 +8,7 @@ VOICE_PATH: .
 
 # 音频文件名的正则表达式（re.search 语义），匹配者才纳入待处理列表
 # 示例：匹配常见音频扩展名
-VOICE_FILE_KEYWORD: \.(mp3|wav|m4a|flac)$
+VOICE_FILE_KEYWORD: \.(mp3|wav|m4a|flac|aac)$
 
 # PyTorch 后端，可选值：xpu | cuda
 TORCH_BACKEND: xpu
