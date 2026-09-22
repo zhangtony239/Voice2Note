@@ -6,11 +6,11 @@
 
 ## What Changes
 
-- **BREAKING**: CLI 入口从 `v2n [PROMPT]` 改为 `v2n START-END "TITLE"`；裸 `v2n`（无参数）与可选 `PROMPT` 用法移除，缺少 `START-END` 或 `TITLE` 时报用法错误并以非零退出码退出。
+- **BREAKING**: CLI 入口从 `v2n [PROMPT]` 改为 `v2n START-END ["TITLE"]`；裸 `v2n`（无参数）与可选 `PROMPT` 用法移除，缺少 `START-END` 时报用法错误并以非零退出码退出。
 - 新增范围选取：`START-END` 按文件名中的数字段整体匹配——从每个音频文件名中提取首个数字段（整数或小数，如 `141`、`1.2`），按数值（int/float）而非字符串比较，选取编号落在 `[START, END]` 闭区间内的所有文件（如 `141-142`、`1.2-2.4`）。
-- 流水线编排改为两阶段：先对范围内全部文件逐一 ASR 并各自保存 STT 原稿 md；全部转写完成后，将这一批原稿合并为一份文档一次性发送给 LLM。
-- 笔记文件名仅由 `TITLE` 确定（清理文件系统非法字符并截断到 `MAX_TITLE_LENGTH`）；移除「取笔记正文首行」的回退命名。
-- `TITLE` 作为独立 text 内容块随合并原稿发送给 LLM（延续现有「file 块 + text 块不拼接」的消息结构）。
+- 流水线编排改为两阶段：先对范围内全部文件逐一 ASR 并各自保存 STT 原稿 md；全部转写完成后，将这一批原稿以各自独立的 file 内容块（filename 为真实原稿文件名）一次性发送给 LLM。
+- 笔记文件名由 `TITLE` 确定（清理文件系统非法字符并截断到 `MAX_TITLE_LENGTH`）；`TITLE` 可空，为空时回退取笔记正文首行命名。
+- `TITLE` 非空时作为独立 text 内容块随原稿发送给 LLM（延续现有「file 块 + text 块不拼接」的消息结构）。
 
 ## Capabilities
 

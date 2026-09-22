@@ -31,16 +31,16 @@
 - 备选：放 cli.py —— 但范围选取属「发现/过滤」语义，与 `discover_voice_files` 同层更内聚且便于单测；放 config.py 不引入新模块。
 - 数值而非字符串比较是硬需求（`9` 不落在 `10-20`；`2.10` 即 `2.1`）。
 
-### D2. 合并原稿在 cli 层完成，llm.py 只做最小改动
+### D2. 原稿逐份以独立 file 内容块发送，llm.py 接口改为多原稿
 
-- `_cmd_run` 收集 `(文件名, 原稿文本)`，全部转写完成后拼接为一份 markdown：每份原稿前加 `## <音频文件名去扩展名>` 分隔标题，整体作为**单个** file 内容块（`filename: "transcripts.md"`）发送。
-- 备选：多个 file 内容块逐份发送 —— 部分 OpenAI 兼容端点对多 file 块支持不一，且单块合并让 LLM 在同一文档内看到全局结构，更利于跨段组织笔记。
-- `generate_note` 签名保持 `generate_note(transcript, config, client, user_prompt)` 不变（`transcript` 即合并文档，`user_prompt` 即 TITLE），仅语义更新；合并逻辑不进 llm.py，保持该模块「单文档进、笔记出」的职责边界。
+- `_cmd_run` 收集 `(原稿文件名, 原稿文本)`，全部转写完成后一次性调用 `generate_note`；每份原稿作为**独立的 file 内容块**发送，`filename` 使用真实原稿文件名（`<音频主名>.md`），不拼接、不合并；TITLE 仍作为独立 text 块发送，全部内容块同处一次请求的同一 user 消息。
+- `generate_note` 签名改为 `generate_note(transcripts: Sequence[tuple[str, str]], config, client, user_prompt)`：由「单文档进」变为「多原稿进」，file 块构造随之上移到参数层；tool calling 写盘逻辑不变。
 
-### D3. 文件名仅由 TITLE 确定，移除正文首行回退
+### D3. 文件名由 TITLE 确定，TITLE 为空时回退正文首行
 
-- `note_filename(content, config, prompt)` 改为 `note_filename(title, config)`：不再读取正文首行；`write_note(content, config, title)` 同步调整。TITLE 为必填参数，回退分支无存在意义。
-- 清理规则不变：去文件系统非法字符、截断 `MAX_TITLE_LENGTH`、空值回退 `untitled`。
+- `note_filename(title, config, content)`：TITLE 非空时由其确定文件名；为空时回退取正文首个非空行（去 markdown 标题记号）；两者清理后均为空则回退 `untitled`。`write_note(content, config, title)` 同步调整。
+- 清理规则不变：去文件系统非法字符、截断 `MAX_TITLE_LENGTH`。
+- `generate_note` 的 `user_prompt`（TITLE）保持可选：非空时作为独立 text 块发送，为空时不发送该块。
 
 ### D4. ASR 失败即中止，不调用 LLM
 

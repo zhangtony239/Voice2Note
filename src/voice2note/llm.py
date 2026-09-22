@@ -1,11 +1,12 @@
 """LLM 阶段：OpenAI 兼容 API + tool calling 写入笔记。
 
 文件写入以 tool calling 方式实现：模型通过 `write_note` 工具提交笔记
-markdown 内容，由 v2n 执行实际写盘；文件名由 CLI 的 PROMPT（提供时）或
-笔记正文首行确定，并截断到 `MAX_TITLE_LENGTH`。
+markdown 内容，由 v2n 执行实际写盘；文件名由 CLI 的 TITLE 确定（TITLE
+为空时取笔记正文首行），并截断到 `MAX_TITLE_LENGTH`。
 
-STT 原稿以 openai 库 v1 兼容的 file 内容块发送（base64 data URL），
-不与 user prompt 文本拼接。
+批次内每份 STT 原稿以 openai 库 v1 兼容的 file 内容块逐份发送
+（base64 data URL，filename 为真实原稿文件名），不与 user prompt（TITLE）
+文本拼接；一次请求产出一篇笔记。
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from __future__ import annotations
 import base64
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import cast
 
@@ -28,13 +29,13 @@ WRITE_NOTE_TOOL = {
     "type": "function",
     "function": {
         "name": "write_note",
-        "description": "将整理好的笔记 markdown 写入文件。content 为完整笔记正文，首行将作为文件名。",
+        "description": "将整理好的笔记 markdown 写入文件。",
         "parameters": {
             "type": "object",
             "properties": {
                 "content": {
                     "type": "string",
-                    "description": "完整的笔记 markdown 正文，首行作为标题/文件名",
+                    "description": "完整的笔记 markdown 正文",
                 },
             },
             "required": ["content"],
@@ -54,40 +55,38 @@ def _sanitize_title(title: str, config: Config) -> str:
     return _ILLEGAL_FILENAME_CHARS.sub("", title)[: config.max_title_length].strip()
 
 
-def note_filename(content: str, config: Config, prompt: str | None = None) -> str:
-    """生成笔记文件名。
-
-    提供 ``prompt``（CLI 位置参数）时直接由其确定文件名（确定性命名）；
-    否则回退取笔记正文首行（去标题记号）。
-    """
-    if prompt is not None:
-        title = _sanitize_title(prompt.strip(), config)
+def note_filename(title: str, config: Config, content: str) -> str:
+    """生成笔记文件名：TITLE 非空时由其确定，否则回退取正文首行（去标题记号）。"""
+    if title.strip():
+        cleaned = _sanitize_title(title, config)
     else:
         first_line = next(
             (line.strip() for line in content.splitlines() if line.strip()), ""
         )
-        title = _sanitize_title(_HEADING_PREFIX.sub("", first_line), config)
-    return f"{title or 'untitled'}.md"
+        cleaned = _sanitize_title(_HEADING_PREFIX.sub("", first_line), config)
+    return f"{cleaned or 'untitled'}.md"
 
 
-def write_note(content: str, config: Config, prompt: str | None = None) -> Path:
+def write_note(content: str, config: Config, title: str = "") -> Path:
     """将笔记 markdown 写入 `NOTE_PATH`（目录不存在时创建）。"""
-    path = config.note_path / note_filename(content, config, prompt)
+    path = config.note_path / note_filename(title, config, content)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return path
 
 
 def generate_note(
-    transcript: str,
+    transcripts: Sequence[tuple[str, str]],
     config: Config,
     client=None,
-    user_prompt: str | None = None,
+    user_prompt: str = "",
 ) -> Path:
     """调用 LLM 将 STT 原稿整理为笔记，经 tool calling 写入文件。
 
-    ``user_prompt`` 为 CLI 位置参数：随原稿发送给 LLM，并直接决定笔记文件名。
-    ``client`` 仅供测试注入假客户端；生产路径使用 openai SDK。
+    ``transcripts`` 为批次内全部 STT 原稿的 ``(文件名, 文本)`` 列表：每份
+    原稿作为独立 file 内容块发送（filename 为真实原稿文件名），一次请求
+    产出一篇笔记；``user_prompt`` 为 CLI 的 TITLE：随原稿发送给 LLM，并直接
+    决定笔记文件名。``client`` 仅供测试注入假客户端；生产路径使用 openai SDK。
     """
     if client is None:
         from openai import OpenAI
@@ -98,11 +97,12 @@ def generate_note(
         {
             "type": "file",
             "file": {
-                "filename": "transcript.md",
+                "filename": filename,
                 "file_data": "data:text/markdown;base64,"
-                + base64.b64encode(transcript.encode("utf-8")).decode("ascii"),
+                + base64.b64encode(text.encode("utf-8")).decode("ascii"),
             },
         }
+        for filename, text in transcripts
     ]
     if user_prompt:
         user_parts.append({"type": "text", "text": user_prompt})
@@ -138,7 +138,7 @@ def generate_note(
                 if not isinstance(content, str) or not content.strip():
                     result = "错误: content 不能为空"
                 else:
-                    note_path = write_note(content, config, user_prompt)
+                    note_path = write_note(content, config, user_prompt or "")
                     result = f"已写入: {note_path}"
             messages.append(
                 {"role": "tool", "tool_call_id": call.id, "content": result}
