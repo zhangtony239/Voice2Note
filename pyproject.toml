@@ -9,10 +9,12 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "librosa>=1.0.0",
+    "openai>=2.9.0",
     "pyyaml>=6.0.3",
     "ruff>=0.16.8",
     "torch>=2.14.0",
     "torchaudio>=2.11.0",
+    "tqdm>=4.66.5",
     "transformers>=5.17.0",
 ]
 

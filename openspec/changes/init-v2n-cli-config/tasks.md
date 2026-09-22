@@ -30,24 +30,24 @@
 
 ## 6. 范围扩展：流水线配置与模板
 
-- [ ] 6.1 模板新增 `ASR_LANGUAGE: zh` 与 `TRANSCRIPT_PATH: .transcripts/`（含解释注释）；验证：`v2n config` 重建的文件包含这两个字段
-- [ ] 6.2 `config.py` 的 `REQUIRED_FIELDS` 与 `Config` 增加 `asr_language`、`transcript_path`；验证：删除字段后加载报错且信息含字段名
-- [ ] 6.3 `pyproject.toml` 新增 `openai` 依赖并 `uv sync`；验证：解析与安装成功
+- [x] 6.1 模板新增 `ASR_LANGUAGE: zh` 与 `TRANSCRIPT_PATH: .transcripts/`（含解释注释）；验证：`v2n config` 重建的文件包含这两个字段
+- [x] 6.2 `config.py` 的 `REQUIRED_FIELDS` 与 `Config` 增加 `asr_language`、`transcript_path`；验证：删除字段后加载报错且信息含字段名
+- [x] 6.3 `pyproject.toml` 新增 `openai`、`tqdm` 依赖并 `uv sync`；验证：解析与安装成功
 
 ## 7. ASR 阶段
 
-- [ ] 7.1 实现 `src/voice2note/asr.py`：固定 Fun-ASR-Nano（model_id/revision 写死），按 `TORCH_BACKEND` 加载（bfloat16、`disable_mmap` 透传），懒加载单例；验证：`v2n config` 路径不触发 torch 导入
+- [x] 7.1 实现 `src/voice2note/asr.py`：固定 Fun-ASR-Nano（model_id/revision 写死），按 `TORCH_BACKEND` 加载（bfloat16、`disable_mmap` 透传），懒加载单例；验证：`v2n config` 路径不触发 torch 导入
 - [ ] 7.2 实现 `transcribe(audio_path, config)`：`apply_transcription_request(audio=本地路径, language=ASR_LANGUAGE)` + `generate(max_new_tokens=512, do_sample=False)`，返回转写文本；验证：对一段真实音频产出非空文本
 - [ ] 7.3 原稿落盘：写入 `TRANSCRIPT_PATH/(stem).md`（目录不存在时创建）；验证：转写后目录下出现同名原稿文件
 
 ## 8. LLM 阶段
 
-- [ ] 8.1 实现 `src/voice2note/llm.py`：openai SDK（base_url/api_key/model），system=`SYSTEM_PROMPT`、user=STT 原稿；验证：模块可导入、参数组装正确（可用假 client 单测）
-- [ ] 8.2 实现 `write_note` tool calling 循环：模型提交 content → v2n 写文件 → 回传 tool 结果，直到无 tool call 或轮次上限；验证：假 client 场景下文件被写入
-- [ ] 8.3 实现文件名规则：首行去 `#` 记号与空白、清理非法字符 `\ / : * ? " < > |`、截断 `MAX_TITLE_LENGTH`、扩展名 `.md`，写入 `NOTE_PATH`；验证：`# 会议纪要：产品周会` → `会议纪要：产品周会.md`，超长截断生效
+- [x] 8.1 实现 `src/voice2note/llm.py`：openai SDK（base_url/api_key/model），system=`SYSTEM_PROMPT`、user=STT 原稿；验证：模块可导入、参数组装正确（假 client 单测通过）
+- [x] 8.2 实现 `write_note` tool calling 循环：模型提交 content → v2n 写文件 → 回传 tool 结果，直到模型给出最终答复或轮次上限；验证：假 client 场景下文件被写入
+- [x] 8.3 实现文件名规则：首行去 `#` 记号与空白、清理非法字符 `\ / : * ? " < > |`、截断 `MAX_TITLE_LENGTH`、扩展名 `.md`，写入 `NOTE_PATH`；验证：`# 会议纪要：产品周会` → `会议纪要：产品周会.md`，超长截断生效
 
 ## 9. 流水线编排与集成验证
 
-- [ ] 9.1 `cli.py` 支持裸 `v2n`：无子命令时执行 `load_config → discover_voice_files → 逐文件 transcribe+落盘 → generate_note`；无匹配文件时提示并正常退出；配置错误 fail-fast；验证：`v2n --help` 仍可用、无音频目录运行提示正常
+- [x] 9.1 `cli.py` 支持裸 `v2n`：无子命令时执行 `load_config → discover_voice_files → 逐文件 transcribe+落盘 → generate_note`（进度走 tqdm）；无匹配文件时提示并正常退出；配置错误 fail-fast；验证：`v2n --help` 仍可用、无音频目录运行提示正常
 - [ ] 9.2 端到端验证：真实音频 + 真实 LLM 配置跑通 `v2n`，产出原稿与笔记；验证：`TRANSCRIPT_PATH` 与 `NOTE_PATH` 下各有产物
-- [ ] 9.3 `ruff check` 与 `ruff format --check` 全部通过
+- [x] 9.3 `ruff check` 与 `ruff format --check` 全部通过

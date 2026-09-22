@@ -22,11 +22,13 @@ REQUIRED_FIELDS: tuple[str, ...] = (
     "VOICE_PATH",
     "VOICE_FILE_KEYWORD",
     "TORCH_BACKEND",
+    "ASR_LANGUAGE",
     "LLM_BASE_URL",
     "LLM_API_KEY",
     "LLM_MODEL",
     "SYSTEM_PROMPT",
     "NOTE_PATH",
+    "TRANSCRIPT_PATH",
     "MAX_TITLE_LENGTH",
 )
 
@@ -48,11 +50,13 @@ class Config:
     voice_file_keyword: re.Pattern[str]
     torch_backend: str
     disable_mmap: bool
+    asr_language: str
     llm_base_url: str
     llm_api_key: str
     llm_model: str
     system_prompt: str
     note_path: Path
+    transcript_path: Path
     max_title_length: int
 
 
@@ -138,11 +142,13 @@ def load_config(base_dir: Path | None = None) -> Config:
         voice_file_keyword=keyword,
         torch_backend=torch_backend,
         disable_mmap=disable_mmap,
+        asr_language=str(data["ASR_LANGUAGE"]),
         llm_base_url=str(data["LLM_BASE_URL"]),
         llm_api_key=str(data["LLM_API_KEY"]),
         llm_model=str(data["LLM_MODEL"]),
         system_prompt=str(data["SYSTEM_PROMPT"]),
         note_path=Path(str(data["NOTE_PATH"])),
+        transcript_path=Path(str(data["TRANSCRIPT_PATH"])),
         max_title_length=max_title_length,
     )
 
