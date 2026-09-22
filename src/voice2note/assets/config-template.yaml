@@ -31,12 +31,11 @@ LLM_BASE_URL: ""
 # API 密钥（必填）
 LLM_API_KEY: ""
 
-# 模型名称（必填），例如: gpt-4o-mini
+# 模型名称（必填），例如: deepseek-flash
 LLM_MODEL: ""
 
-# 系统提示词（必填）：驱动 LLM 将 STT 原稿整理为笔记，
-# 并以 tool calling 方式把笔记写入文件
-SYSTEM_PROMPT: ""
+# 系统提示词
+SYSTEM_PROMPT: "请结合用户发来的录课STT，生成课堂笔记。需要图示的部分以Mermaid取代ASCII图。"
 
 # ---- 输出 ----
 

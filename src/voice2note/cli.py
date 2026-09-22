@@ -48,7 +48,7 @@ def _cmd_config(_args: argparse.Namespace) -> int:
     target = config_path()
     if not target.exists():
         create_config()
-    print(target.resolve())
+    print(f'当前配置文件路径：{target.resolve()}')
     return 0
 
 
