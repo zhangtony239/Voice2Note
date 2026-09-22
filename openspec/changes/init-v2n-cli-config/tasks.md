@@ -2,8 +2,8 @@
 
 ## 1. 包与依赖准备
 
-- [ ] 1.1 在 `pyproject.toml` 中新增 `pyyaml` 依赖并运行 `uv sync`，验证 `uv lock` 更新且安装成功
-- [ ] 1.2 将 `[project.scripts]` 的入口从 `voice2note = "voice2note:main"` 改为 `v2n = "voice2note.cli:main"`，验证 `pyproject.toml` 语法正确（`uv sync` 通过）
+- [x] 1.1 在 `pyproject.toml` 中新增 `pyyaml` 依赖并运行 `uv sync`，验证 `uv lock` 更新且安装成功
+- [x] 1.2 将 `[project.scripts]` 的入口从 `voice2note = "voice2note:main"` 改为 `v2n = "voice2note.cli:main"`，验证 `pyproject.toml` 语法正确（`uv sync` 通过）
 
 ## 2. 配置模板
 
