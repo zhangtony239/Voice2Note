@@ -2,8 +2,8 @@
 
 ## 1. 范围解析与文件选取（config.py）
 
-- [ ] 1.1 在 `src/voice2note/config.py` 新增 `parse_range(arg: str) -> tuple[float, float]`：以 `re.fullmatch(r"(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)", arg)` 解析 `START-END` 为两个 float，解析失败或 START > END 时抛 `ConfigError`；验证：临时脚本对 `141-142`、`1.2-2.4`、`abc-142`、`142-141` 的解析结果符合 design D1
-- [ ] 1.2 在 `src/voice2note/config.py` 新增 `select_voice_files(config, start: float, end: float) -> list[Path]`：基于 `discover_voice_files` 结果提取文件名首个数字段（`re.search(r"\d+(?:\.\d+)?", path.stem)`），按 float 数值过滤 `[start, end]` 闭区间并升序返回，无数字段的文件不入选；验证：构造临时目录（`会议录音 141.aac`、`会议录音 142.aac`、`会议录音 143.aac`、`会议录音 9.aac`、`会议录音 21.aac`、无编号文件）断言 `141-142` 只选 141/142、`10-20` 为空
+- [x] 1.1 在 `src/voice2note/config.py` 新增 `parse_range(arg: str) -> tuple[float, float]`：以 `re.fullmatch(r"(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)", arg)` 解析 `START-END` 为两个 float，解析失败或 START > END 时抛 `ConfigError`；验证：临时脚本对 `141-142`、`1.2-2.4`、`abc-142`、`142-141` 的解析结果符合 design D1
+- [x] 1.2 在 `src/voice2note/config.py` 新增 `select_voice_files(config, start: float, end: float) -> list[Path]`：基于 `discover_voice_files` 结果提取文件名首个数字段（`re.search(r"\d+(?:\.\d+)?", path.stem)`），按 float 数值过滤 `[start, end]` 闭区间并升序返回，无数字段的文件不入选；验证：构造临时目录（`会议录音 141.aac`、`会议录音 142.aac`、`会议录音 143.aac`、`会议录音 9.aac`、`会议录音 21.aac`、无编号文件）断言 `141-142` 只选 141/142、`10-20` 为空
 
 ## 2. LLM 模块调整（llm.py）
 

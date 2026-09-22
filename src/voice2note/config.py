@@ -167,3 +167,43 @@ def discover_voice_files(config: Config) -> list[Path]:
         for path in root.rglob("*")
         if path.is_file() and config.voice_file_keyword.search(path.name)
     )
+
+
+#: START-END 范围参数格式（数字段：整数或小数）
+_RANGE_PATTERN = re.compile(r"(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)")
+
+#: 文件名中的首个数字段
+_NUMBER_SEGMENT_PATTERN = re.compile(r"\d+(?:\.\d+)?")
+
+
+def parse_range(arg: str) -> tuple[float, float]:
+    """解析 ``START-END`` 为数值区间（按 float 比较，支持整数与小数）。
+
+    解析失败或 START > END 时抛出 :class:`ConfigError`。
+    """
+    match = _RANGE_PATTERN.fullmatch(arg.strip())
+    if match is None:
+        raise ConfigError(
+            f"START-END 格式非法: {arg!r}，应为形如 \"141-142\" 或 \"1.2-2.4\" 的范围。"
+        )
+    start, end = float(match.group(1)), float(match.group(2))
+    if start > end:
+        raise ConfigError(f"START-END 范围非法: START ({start}) 大于 END ({end})。")
+    return start, end
+
+
+def select_voice_files(config: Config, start: float, end: float) -> list[Path]:
+    """按文件名首个数字段的数值选取落在 ``[start, end]`` 闭区间内的音频文件。
+
+    数字段按数值（int/float）而非字符串比较；无数字段的文件不入选；
+    结果按数值升序排列。
+    """
+    selected: list[tuple[float, Path]] = []
+    for path in discover_voice_files(config):
+        match = _NUMBER_SEGMENT_PATTERN.search(path.stem)
+        if match is None:
+            continue
+        number = float(match.group())
+        if start <= number <= end:
+            selected.append((number, path))
+    return [path for _, path in sorted(selected, key=lambda item: item[0])]
