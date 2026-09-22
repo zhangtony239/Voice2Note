@@ -103,7 +103,7 @@ argparse 的 subparsers 不设 `required`：无子命令时执行流水线（`_c
 - 固定模型：`FunAudioLLM/Fun-ASR-Nano-2512-hf` + revision `d93b302ee7fd505e1b3576120fc142fc6f7820e1`（与 `minimal.py` 一致，写死在代码）。
 - 加载：`dtype=torch.bfloat16`，`.to(TORCH_BACKEND)`，processor 与 model 均透传 `disable_mmap=生效值`。
 - 推理：`processor.apply_transcription_request(audio=..., language=ASR_LANGUAGE, ...)`，`model.generate(max_new_tokens=512, do_sample=False)`（512 为记录的假设：MVP 的 128 对真实录音偏短）。
-- 全程语句切分：实测（会议录音）≤30s 转写正确、45s 起重复幻觉、60s+ 完全乱码、>122s 超位置嵌入上限报错——模型按短话语训练，有效上限远小于位置嵌入硬上限。音频统一加载为 16kHz float32 数组（librosa；aac/m4a 经 PyAV）；20ms 帧级 RMS + 自适应阈值（噪声地板分位 ×4）检测静音，≥0.4s 静音视为句界（静音中点下刀，覆盖连续不丢音频）；相邻语句合并到 ≤30s；单条语句仍超 30s 时在目标位置之前 5s 内选最安静 20ms 窗口保底硬切。拼接时中日文不加空格、其余语言加空格。转写进度经 `progress_factory` 回调接入 tqdm（逐句更新，进度更平滑）。
+- 密集语音单元切分：实测（会议录音）解码单元混入大段静音（老师翻页/演示）会触发重复幻觉（≤30s 且含长静音的块也循环；>45s 幻觉、>122s 超位置嵌入上限报错）。因此以 20ms 帧级 RMS + 自适应阈值（噪声地板分位 ×4）检测语音区（容忍 <0.4s 短停顿），语音区边缘仅保留 0.15s 呼吸空间，解码单元只含密集语音；句间停顿 ≤0.5s 的相邻语音区合并（≤30s）；<1s 微单元并入相邻单元；超 30s 单元在目标位置之前 5s 内选最安静 20ms 窗口保底硬切。音频统一加载为 16kHz float32 数组（librosa；aac/m4a 经 PyAV）。拼接时中日文不加空格、其余语言加空格。转写进度经 `progress_factory` 回调接入 tqdm（逐句更新）。验证：10 分钟录音切 65 单元（平均 8.3s），此前幻觉的两个区域（论文演示、图表展示）全部恢复真实内容，零垃圾单元。
 - 模型懒加载 + 进程内单例：`v2n config` 等轻量命令不触发 torch/transformers 导入。
 - 原稿落盘：`TRANSCRIPT_PATH / (音频 stem + ".md")`。
 
@@ -115,6 +115,8 @@ argparse 的 subparsers 不设 `required`：无子命令时执行流水线（`_c
 
 ### D11: 流水线编排（`cli.py` `_cmd_run`）
 `load_config` → `discover_voice_files` → 逐个文件（tqdm 进度）：`transcribe`（内层按语句段更新 tqdm）→ 原稿落盘 → `generate_note`（tool calling 写笔记）。CLI 可选位置参数 `PROMPT` 透传给 `generate_note`。无匹配文件时输出提示并正常退出；配置错误在处理任何文件前 fail-fast。
+
+- 解码循环抑制：密集语音单元仍可能偶发自回归循环（如板书停顿后"零"×512 直至 token 上限）。在 `generate` 中加 `repetition_penalty=1.2`（解码层面修复，非文本后处理）；A/B 验证：循环单元 dup 1.00→0.04 且恢复真实内容（"零一厘米…身高体重…三十八个"），英文基准句与正常中文单元质量不变。
 
 ## Risks / Trade-offs
 

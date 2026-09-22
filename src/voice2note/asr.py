@@ -10,7 +10,6 @@
 
 from __future__ import annotations
 
-import itertools
 from pathlib import Path
 
 from voice2note.config import Config
@@ -18,6 +17,10 @@ from voice2note.config import Config
 MODEL_ID = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
 MODEL_REVISION = "d93b302ee7fd505e1b3576120fc142fc6f7820e1"
 MAX_NEW_TOKENS = 512
+
+#: 抑制自回归解码循环（如"零零零…"直至 token 上限）。实测 1.2 可消除
+#: 循环且不影响正常转写质量（A/B：循环单元 dup 1.00 -> 0.04）。
+REPETITION_PENALTY = 1.2
 
 #: librosa/soundfile 无法解码、需经 PyAV（FFmpeg）解码的格式
 AV_SUFFIXES = frozenset({".aac", ".m4a", ".m4b", ".mp4"})
@@ -34,9 +37,12 @@ CHUNK_MAX_SAMPLES = 30 * SAMPLING_RATE
 
 #: 语句切分参数（能量/VAD 式静音检测）
 _SEGMENT_FRAME_SAMPLES = 320  # 20ms 帧长
-_SEGMENT_MIN_SILENCE_FRAMES = 20  # 静音 ≥0.4s 才视为句界
+_SEGMENT_MIN_SILENCE_FRAMES = 20  # 静音 ≥0.4s 即断开语音区
 _SEGMENT_FLOOR_PERCENTILE = 20  # 噪声地板分位
 _SEGMENT_FLOOR_FACTOR = 4.0  # 阈值 = 地板 × 该系数
+_SEGMENT_GAP_MERGE_SAMPLES = int(0.5 * SAMPLING_RATE)  # 句间停顿 ≤0.5s 才合并
+_SEGMENT_EDGE_PADDING = int(0.15 * SAMPLING_RATE)  # 语音区边缘保留的呼吸空间
+_SEGMENT_MIN_UNIT_SAMPLES = SAMPLING_RATE  # <1s 的微单元并入相邻单元
 
 #: 保底硬切的音量感知搜索参数（只向前搜索 5s，窗口 20ms）
 _SPLIT_SEARCH_SAMPLES = 5 * SAMPLING_RATE
@@ -127,12 +133,16 @@ def _find_split_point(audio, target: int) -> int:
 
 
 def segment_audio(audio) -> list:
-    """全程语句切分：按静音找句界，短句合并到 30s 上限。
+    """全程语句切分：解码单元只含密集语音。
 
     1. 20ms 帧级 RMS，自适应阈值（噪声地板 × 系数）判定语音/静音；
-    2. 持续 ≥0.4s 的静音视为句界，在静音中点下刀（不丢音频，覆盖连续）；
-    3. 相邻语句合并到不超过 30s（CHUNK_MAX_SAMPLES）；
-    4. 单条语句仍超 30s 时（如持续发言无停顿），按音量感知保底硬切。
+    2. 语音区 = 连续语音帧（容忍 <0.4s 的短停顿）；区间的长静音属于
+       句间停顿，不并入任何单元——模型按短话语训练，混入大段静音会
+       触发重复幻觉（实测"这个图很多表格"×100 即此原因）；
+    3. 语音区边缘只保留 0.15s 呼吸空间（避免句界半截词/边缘幻觉）；
+    4. 句间停顿 ≤0.5s 的相邻语音区合并（合并后 ≤30s）；
+    5. <1s 的微单元并入相邻单元，避免碎片转写；
+    6. 单元仍超 30s 时（持续发言无停顿），按音量感知保底硬切。
     """
     import numpy as np
 
@@ -148,33 +158,50 @@ def segment_audio(audio) -> list:
     threshold = max(floor * _SEGMENT_FLOOR_FACTOR, 1e-4)
     speech = rms > threshold
 
-    # 句界 = 长静音的中点
-    cuts = [0]
-    silence_start = None
-    for i, is_speech in enumerate(speech):
-        if is_speech:
-            if (
-                silence_start is not None
-                and i - silence_start >= _SEGMENT_MIN_SILENCE_FRAMES
-            ):
-                cuts.append((silence_start + i) // 2 * _SEGMENT_FRAME_SAMPLES)
-            silence_start = None
-        elif silence_start is None:
-            silence_start = i
-    cuts.append(n_frames * _SEGMENT_FRAME_SAMPLES)
+    # 语音区：连续语音帧，容忍 <0.4s 的短停顿
+    regions: list[tuple[int, int]] = []
+    i = 0
+    while i < n_frames:
+        if not speech[i]:
+            i += 1
+            continue
+        start, end, gap = i, i, 0
+        j = i
+        while j < n_frames:
+            if speech[j]:
+                end, gap = j + 1, 0
+            else:
+                gap += 1
+                if gap >= _SEGMENT_MIN_SILENCE_FRAMES:
+                    break
+            j += 1
+        regions.append((start, end))
+        i = j
 
-    # 合并相邻语句到 30s 上限
-    merged: list[tuple[int, int]] = []
-    seg_start, seg_end = cuts[0], cuts[1]
-    for start, end in itertools.pairwise(cuts[1:]):
-        if end - seg_start <= CHUNK_MAX_SAMPLES:
-            seg_end = end
-        else:
-            merged.append((seg_start, seg_end))
-            seg_start, seg_end = start, end
-    merged.append((seg_start, seg_end))
+    # 帧 -> 样本，边缘保留呼吸空间
+    units: list[list[int]] = [
+        [
+            max(0, start * _SEGMENT_FRAME_SAMPLES - _SEGMENT_EDGE_PADDING),
+            min(len(audio), end * _SEGMENT_FRAME_SAMPLES + _SEGMENT_EDGE_PADDING),
+        ]
+        for start, end in regions
+    ]
+    if not units:
+        return [audio]
 
-    # 超长语句按音量感知保底硬切
+    # 合并：句间停顿 ≤0.5s 且合并后 ≤30s；<1s 的微单元无条件并入前一个
+    merged: list[list[int]] = [units[0]]
+    for start, end in units[1:]:
+        gap = start - merged[-1][1]
+        tiny = end - start < _SEGMENT_MIN_UNIT_SAMPLES
+        if (gap <= _SEGMENT_GAP_MERGE_SAMPLES or tiny) and (
+            end - merged[-1][0] <= CHUNK_MAX_SAMPLES
+        ):
+            merged[-1][1] = end
+            continue
+        merged.append([start, end])
+
+    # 超长单元按音量感知保底硬切
     result = []
     for start, end in merged:
         pos = start
@@ -208,7 +235,10 @@ def _transcribe_array(audio, config: Config) -> str:
     ).to(config.torch_backend)
     with torch.inference_mode():
         generated = model.generate(
-            **inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False
+            **inputs,
+            max_new_tokens=MAX_NEW_TOKENS,
+            do_sample=False,
+            repetition_penalty=REPETITION_PENALTY,
         )
     new_tokens = generated[:, inputs.input_ids.shape[1] :]
     return processor.batch_decode(new_tokens, skip_special_tokens=True)[0]
