@@ -7,8 +7,8 @@
 
 ## 2. 配置模板
 
-- [ ] 2.1 创建 `src/voice2note/assets/config-template.yaml`，内容按 design.md D7 草案：含 `VOICE_PATH`、`VOICE_FILE_KEYWORD`、`TORCH_BACKEND`、`DISABLE_MMAP`（注释态）、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`、`SYSTEM_PROMPT`、`NOTE_PATH: outputs/`、`MAX_TITLE_LENGTH: 20`，每个字段带解释注释；验证文件存在且为合法 YAML
-- [ ] 2.2 确认 uv_build 会将 assets 目录随包安装：`uv sync` 后在 `.venv` 的 `site-packages/voice2note/assets/` 下能看到 `config-template.yaml`
+- [x] 2.1 创建 `src/voice2note/assets/config-template.yaml`，内容按 design.md D7 草案：含 `VOICE_PATH`、`VOICE_FILE_KEYWORD`、`TORCH_BACKEND`、`DISABLE_MMAP`（注释态）、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`、`SYSTEM_PROMPT`、`NOTE_PATH: outputs/`、`MAX_TITLE_LENGTH: 20`，每个字段带解释注释；验证文件存在且为合法 YAML
+- [x] 2.2 确认 uv_build 会将 assets 目录随包安装：`uv build` 产物 wheel 中包含 `voice2note/assets/config-template.yaml`（editable 安装经 `.pth` 直接引用 `src/`，不复制进 site-packages）
 
 ## 3. 配置加载模块
 
