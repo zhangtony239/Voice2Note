@@ -51,4 +51,5 @@
 - [x] 9.1 `cli.py` 支持裸 `v2n`：无子命令时执行 `load_config → discover_voice_files → 逐文件 transcribe+落盘 → generate_note`（进度走 tqdm）；无匹配文件时提示并正常退出；配置错误 fail-fast；验证：`v2n --help` 仍可用、无音频目录运行提示正常
 - [ ] 9.2 端到端验证：真实音频 + 真实 LLM 配置跑通 `v2n`，产出原稿与笔记；验证：`TRANSCRIPT_PATH` 与 `NOTE_PATH` 下各有产物
 - [x] 9.4 `v2n [PROMPT]`：可选位置参数以独立 text 内容块随原稿 file 内容块发送（不拼接）并直接决定文件名（清理+截断）；无 PROMPT 回退正文首行命名；验证：假 client 两场景文件名正确
+- [x] 9.5 AAC/M4A 支持：librosa 无法解码的格式经 PyAV（FFmpeg）解码为 16kHz float32 数组再传入 processor（Windows 无 torchcodec 轮子）；验证：av 生成 aac → 解码 → 转写全链路通过
 - [x] 9.3 `ruff check` 与 `ruff format --check` 全部通过

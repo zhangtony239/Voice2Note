@@ -14,6 +14,9 @@ MODEL_ID = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
 MODEL_REVISION = "d93b302ee7fd505e1b3576120fc142fc6f7820e1"
 MAX_NEW_TOKENS = 512
 
+#: librosa/soundfile 无法解码、需经 PyAV（FFmpeg）解码的格式
+AV_SUFFIXES = frozenset({".aac", ".m4a", ".m4b", ".mp4"})
+
 _processor = None
 _model = None
 
@@ -47,13 +50,39 @@ def _load(config: Config):
     return _processor, _model
 
 
+def _decode_audio_with_av(audio_path: Path, sampling_rate: int = 16000):
+    """经 PyAV（FFmpeg）解码为 16kHz 单声道 float32 NumPy 数组。"""
+    import av
+    import numpy as np
+
+    container = av.open(str(audio_path))
+    try:
+        stream = container.streams.audio[0]
+        resampler = av.AudioResampler(format="fltp", rate=sampling_rate, layout="mono")
+        chunks: list = []
+        for packet in container.demux(stream):
+            for frame in packet.decode():
+                for resampled in resampler.resample(frame):
+                    chunks.append(resampled.to_ndarray())
+    finally:
+        container.close()
+    if not chunks:
+        raise RuntimeError(f"音频文件无可解码的音频流: {audio_path}")
+    # fltp 的 to_ndarray 形状为 (channels, samples)，已重采样为 mono
+    return np.concatenate(chunks, axis=1)[0].astype("float32")
+
+
 def transcribe(audio_path: Path, config: Config) -> str:
     """将单个音频文件转写为 STT 原稿文本。"""
     import torch
 
     processor, model = _load(config)
+    # librosa/soundfile 无法解码的格式（aac/m4a 等）先经 PyAV 解码为数组
+    audio: str | object = str(audio_path)
+    if audio_path.suffix.lower() in AV_SUFFIXES:
+        audio = _decode_audio_with_av(audio_path)
     inputs = processor.apply_transcription_request(
-        audio=str(audio_path),
+        audio=audio,
         language=config.asr_language,
         processor_kwargs={
             "return_tensors": "pt",
