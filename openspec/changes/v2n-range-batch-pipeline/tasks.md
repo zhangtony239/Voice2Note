@@ -12,9 +12,9 @@
 
 ## 3. CLI 编排重写（cli.py）
 
-- [ ] 3.1 修改 `src/voice2note/cli.py` 的 `build_parser`：`START-END` 为必填位置参数、`TITLE` 为可选位置参数（`nargs="?"` 默认空），更新模块与 help 文案；验证：`v2n`（无参）输出 argparse 用法错误且退出码非零，`v2n 141-142` 可进入流水线，`v2n config` 子命令不受影响
-- [ ] 3.2 重写 `_cmd_run`：`parse_range` → `select_voice_files`（为空时提示并返回 0）→ 循环 `transcribe` + `save_transcript` 收集 `(原稿文件名, 原稿文本)`（ASR 循环外层 `try/except Exception`，stderr 输出并返回 1）→ 全部完成后单次调用 `generate_note(原稿列表, config, user_prompt=TITLE)`（每份原稿独立 file 块，见 design D2）；验证：`ruff check` 通过
-- [ ] 3.3 保持 tqdm 进度显示（外层按选取文件列表，语句级进度工厂不变），转写与笔记路径输出沿用现有 `tqdm.write` 风格；验证：代码审读确认两阶段输出顺序为「原稿×N → 笔记×1」
+- [x] 3.1 修改 `src/voice2note/cli.py` 的 `build_parser`：`START-END` 为必填位置参数、`TITLE` 为可选位置参数（`nargs="?"` 默认空），更新模块与 help 文案；验证：`v2n`（无参）输出 argparse 用法错误且退出码非零，`v2n 141-142` 可进入流水线，`v2n config` 子命令不受影响
+- [x] 3.2 重写 `_cmd_run`：`parse_range` → `select_voice_files`（为空时提示并返回 0）→ 循环 `transcribe` + `save_transcript` 收集 `(原稿文件名, 原稿文本)`（ASR 循环外层 `try/except Exception`，stderr 输出并返回 1）→ 全部完成后单次调用 `generate_note(原稿列表, config, user_prompt=TITLE)`（每份原稿独立 file 块，见 design D2）；验证：`ruff check` 通过，`abc-142`/`142-141` 报 ConfigError 退出码 1
+- [x] 3.3 保持 tqdm 进度显示（外层按选取文件列表，语句级进度工厂不变），转写与笔记路径输出沿用现有 `tqdm.write` 风格；验证：代码审读确认两阶段输出顺序为「原稿×N → 笔记×1」
 
 ## 4. 文档与收尾
 
