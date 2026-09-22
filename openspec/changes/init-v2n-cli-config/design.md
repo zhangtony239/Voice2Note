@@ -102,7 +102,8 @@ argparse 的 subparsers 不设 `required`：无子命令时执行流水线（`_c
 ### D9: ASR 阶段实现（`asr.py`）
 - 固定模型：`FunAudioLLM/Fun-ASR-Nano-2512-hf` + revision `d93b302ee7fd505e1b3576120fc142fc6f7820e1`（与 `minimal.py` 一致，写死在代码）。
 - 加载：`dtype=torch.bfloat16`，`.to(TORCH_BACKEND)`，processor 与 model 均透传 `disable_mmap=生效值`。
-- 推理：`processor.apply_transcription_request(audio=本地文件路径, language=ASR_LANGUAGE, ...)`，`model.generate(max_new_tokens=512, do_sample=False)`（512 为记录的假设：MVP 的 128 对真实录音偏短）。
+- 推理：`processor.apply_transcription_request(audio=..., language=ASR_LANGUAGE, ...)`，`model.generate(max_new_tokens=512, do_sample=False)`（512 为记录的假设：MVP 的 128 对真实录音偏短）。
+- 长音频分块：audio tower 位置嵌入上限 2048 帧（实测 ~16.7 帧/秒，约 122.6s），超限报张量尺寸错误。音频统一加载为 16kHz float32 数组（librosa；aac/m4a 经 PyAV），按单块上限（1_800_000 样本 ≈ 112.5s，留余量）分块；切点在目标位置之前 ±5s 内选最安静的 20ms 窗口（音量感知，只向前搜索保证不超限），拼接时中日文不加空格、其余语言加空格。
 - 模型懒加载 + 进程内单例：`v2n config` 等轻量命令不触发 torch/transformers 导入。
 - 原稿落盘：`TRANSCRIPT_PATH / (音频 stem + ".md")`。
 
