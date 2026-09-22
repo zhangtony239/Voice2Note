@@ -30,3 +30,18 @@
 #### Scenario: 模板创建后未填写必填项
 - **WHEN** 用户执行 `v2n config` 创建了模板文件但未填写 `LLM_API_KEY` 等必填项
 - **THEN** `v2n config` 仍正常退出并打印路径，不因字段缺失而报错
+
+### Requirement: 裸 v2n 运行完整流水线
+不带子命令执行 `v2n` SHALL 运行完整流水线：加载配置 → 发现音频文件 → 对每个文件执行 ASR 转写并保存 STT 原稿 → 调用 LLM 以 tool calling 生成笔记并写入文件。
+
+#### Scenario: 正常运行
+- **WHEN** 当前目录存在合法 `config.yaml` 且 `VOICE_PATH` 下有匹配 `VOICE_FILE_KEYWORD` 的音频文件，用户执行 `v2n`
+- **THEN** 每个音频文件在 `TRANSCRIPT_PATH` 下产出一份 STT 原稿，并在 `NOTE_PATH` 下产出一篇笔记 markdown
+
+#### Scenario: 未发现音频文件
+- **WHEN** `VOICE_PATH` 下没有匹配 `VOICE_FILE_KEYWORD` 的音频文件，用户执行 `v2n`
+- **THEN** v2n 输出提示信息并正常退出，不调用 ASR 与 LLM
+
+#### Scenario: 配置非法
+- **WHEN** `config.yaml` 缺失或含非法字段，用户执行 `v2n`
+- **THEN** v2n 向 stderr 输出错误信息并以非零退出码退出，不开始处理任何音频文件

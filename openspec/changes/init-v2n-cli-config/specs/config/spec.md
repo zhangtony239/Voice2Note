@@ -22,7 +22,7 @@ v2n SHALL 内置一份 config 模板，模板中每个配置项通过默认值�
 
 #### Scenario: 模板包含全部配置项
 - **WHEN** 用户通过 `v2n config` 创建 `config.yaml` 并打开查看
-- **THEN** 文件中包含以下配置项及解释注释：`VOICE_PATH`、`VOICE_FILE_KEYWORD`、`TORCH_BACKEND`、`DISABLE_MMAP`（默认注释掉）、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`、`SYSTEM_PROMPT`、`NOTE_PATH`、`MAX_TITLE_LENGTH`
+- **THEN** 文件中包含以下配置项及解释注释：`VOICE_PATH`、`VOICE_FILE_KEYWORD`、`TORCH_BACKEND`、`DISABLE_MMAP`（默认注释掉）、`ASR_LANGUAGE`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`、`SYSTEM_PROMPT`、`NOTE_PATH`、`TRANSCRIPT_PATH`、`MAX_TITLE_LENGTH`
 
 #### Scenario: 模板默认值
 - **WHEN** 用户未修改模板直接使用
@@ -71,6 +71,20 @@ LLM 阶段 SHALL 从配置读取 `LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`、
 #### Scenario: LLM 配置齐全
 - **WHEN** `config.yaml` 中四个 LLM 字段均已填写
 - **THEN** 配置加载成功，LLM 阶段可使用这些值建立 OpenAI 兼容 API 连接
+
+### Requirement: ASR_LANGUAGE 是必填字段
+ASR 阶段 SHALL 从配置读取 `ASR_LANGUAGE`（音频转写语言）；该字段缺失 SHALL 导致配置加载报错。
+
+#### Scenario: ASR_LANGUAGE 已配置
+- **WHEN** `config.yaml` 中 `ASR_LANGUAGE` 已填写
+- **THEN** 配置加载成功，ASR 阶段以该语言转写音频
+
+### Requirement: STT 原稿保存到 TRANSCRIPT_PATH
+STT 原稿 SHALL 保存到 `TRANSCRIPT_PATH` 指定的目录（模板默认 `.transcripts/`）；该字段缺失 SHALL 导致配置加载报错。
+
+#### Scenario: 原稿落盘
+- **WHEN** ASR 阶段完成一个音频文件的转写
+- **THEN** 对应的 STT 原稿被写入 `TRANSCRIPT_PATH` 指定的目录（目录不存在时创建）
 
 ### Requirement: 笔记输出遵循 NOTE_PATH 与 MAX_TITLE_LENGTH
 笔记输出目录 SHALL 取自 `NOTE_PATH`（模板默认 `outputs/`）；笔记文件名 SHALL 取自笔记正文首行，并截断到 `MAX_TITLE_LENGTH`（模板默认 `20`）个字符。

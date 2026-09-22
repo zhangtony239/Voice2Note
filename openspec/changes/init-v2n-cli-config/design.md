@@ -82,13 +82,37 @@ LLM_API_KEY: ""       # 必填
 LLM_MODEL: ""         # 必填，例如: gpt-4o-mini
 SYSTEM_PROMPT: ""     # 必填，驱动 LLM 生成笔记并以 tool calling 写文件
 
+# ASR 转写语言（必填）
+ASR_LANGUAGE: zh
+
+# STT 原稿保存目录（目录不存在时自动创建）
+TRANSCRIPT_PATH: .transcripts/
+
 # 笔记输出目录
 NOTE_PATH: outputs/
 
 # 笔记文件名最大长度（取正文首行，超长截断）
 MAX_TITLE_LENGTH: 20
 ```
-注：`VOICE_PATH`/`VOICE_FILE_KEYWORD`/`TORCH_BACKEND`/`NOTE_PATH`/`MAX_TITLE_LENGTH` 的模板默认值即"唯一默认值源"；`LLM_*` 与 `SYSTEM_PROMPT` 无合理默认值，模板留空、加载时报错。
+注：`VOICE_PATH`/`VOICE_FILE_KEYWORD`/`TORCH_BACKEND`/`ASR_LANGUAGE`/`NOTE_PATH`/`TRANSCRIPT_PATH`/`MAX_TITLE_LENGTH` 的模板默认值即"唯一默认值源"；`LLM_*` 与 `SYSTEM_PROMPT` 无合理默认值，模板留空、加载时报错。
+
+### D8: 裸 `v2n` 运行流水线
+argparse 的 subparsers 不设 `required`：无子命令时执行流水线（`_cmd_run`），`v2n config` 仍为子命令。备选：新增 `v2n run` 子命令被否决——用户明确指定裸 `v2n`。
+
+### D9: ASR 阶段实现（`asr.py`）
+- 固定模型：`FunAudioLLM/Fun-ASR-Nano-2512-hf` + revision `d93b302ee7fd505e1b3576120fc142fc6f7820e1`（与 `minimal.py` 一致，写死在代码）。
+- 加载：`dtype=torch.bfloat16`，`.to(TORCH_BACKEND)`，processor 与 model 均透传 `disable_mmap=生效值`。
+- 推理：`processor.apply_transcription_request(audio=本地文件路径, language=ASR_LANGUAGE, ...)`，`model.generate(max_new_tokens=512, do_sample=False)`（512 为记录的假设：MVP 的 128 对真实录音偏短）。
+- 模型懒加载 + 进程内单例：`v2n config` 等轻量命令不触发 torch/transformers 导入。
+- 原稿落盘：`TRANSCRIPT_PATH / (音频 stem + ".md")`。
+
+### D10: LLM 阶段实现（`llm.py`）
+- 客户端：`openai` SDK（OpenAI 兼容），`base_url=LLM_BASE_URL`、`api_key=LLM_API_KEY`、`model=LLM_MODEL`。
+- 工具：`write_note(content: string)`——模型通过 tool calling 提交笔记 markdown，v2n 执行写入；循环处理 tool_calls 直到模型不再调用或达到轮次上限（防死循环）。
+- 文件名：取 `content` 首个非空行，去除行首 `#` 与空白，清理文件系统非法字符 `\ / : * ? " < > |`，截断到 `MAX_TITLE_LENGTH`，扩展名 `.md`；写入 `NOTE_PATH`（mkdir parents）。
+
+### D11: 流水线编排（`cli.py` `_cmd_run`）
+`load_config` → `discover_voice_files` → 逐个文件：`transcribe` → 原稿落盘 → `generate_note`（tool calling 写笔记）。无匹配文件时输出提示并正常退出；配置错误在处理任何文件前 fail-fast。
 
 ## Risks / Trade-offs
 
