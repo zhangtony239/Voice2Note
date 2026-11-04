@@ -1,8 +1,8 @@
 """v2n 命令行入口。
 
-``v2n START-END ["TITLE"]`` 运行完整流水线：按文件名首个数字段的数值
-范围选取音频文件，全部 ASR 完成后将各份 STT 原稿一次性发送给 LLM 生成
-一篇笔记；``v2n config`` 管理配置文件。
+- ``v2n START-END ["TITLE"]``：运行两阶段批处理流水线（ASR 转写 + LLM 生成笔记）
+- ``v2n config``：定位（必要时从模板创建）批处理配置文件 ``config.yaml``
+- ``v2n rec-daemon``：启动面向 RecNote 的远程识别常驻服务（含 ``init-config``、``token`` 子命令）
 """
 
 from __future__ import annotations
@@ -73,12 +73,41 @@ def _cmd_config(_args: argparse.Namespace) -> int:
     return 0
 
 
+def build_config_parser() -> argparse.ArgumentParser:
+    return argparse.ArgumentParser(
+        prog="v2n config",
+        description=(
+            "输出当前工作目录下批处理配置文件 config.yaml 的绝对路径；"
+            "若文件不存在则从内置模板创建（保留注释）。"
+        ),
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="v2n",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
-            "Voice2Note：从原始录音到笔记 markdown 的工作流。"
-            '用法：v2n START-END ["TITLE"]。'
+            "Voice2Note：从原始录音到笔记 markdown 的工作流，以及面向 RecNote 的远程识别常驻服务。\n"
+            '批处理用法：v2n START-END ["TITLE"]'
+        ),
+        epilog=(
+            "子命令与工作模式：\n"
+            '  v2n START-END ["TITLE"]                按编号范围批处理录音（ASR 转写 + LLM 生成笔记）\n'
+            "  v2n config                             定位（必要时从模板创建）批处理配置 config.yaml\n"
+            "  v2n rec-daemon [OPTIONS]               启动面向手机端 RecNote 的远程识别常驻服务\n"
+            "  v2n rec-daemon init-config [--config]  从模板创建服务配置 rec-daemon.yaml\n"
+            "  v2n rec-daemon token                   生成连接 token、其 SHA-256 摘要与会话密钥\n"
+            "\n"
+            "示例：\n"
+            "  v2n config\n"
+            '  v2n 141-142 "会议纪要"\n'
+            "  v2n 1.2-2.4\n"
+            "  v2n rec-daemon init-config --config rec-daemon.yaml\n"
+            "  v2n rec-daemon token\n"
+            "  v2n rec-daemon --config rec-daemon.yaml --host 127.0.0.1 --port 8765\n"
+            "\n"
+            "提示：运行 `v2n rec-daemon --help` 查看远程识别常驻服务的完整选项与子命令说明。"
         ),
     )
     parser.add_argument(
@@ -117,7 +146,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     # `v2n config` 子命令优先于 START-END 位置参数（手动分发，避免 argparse
     # 将 "config" 匹配到必填的 START-END 位置参数）
     if args_list and args_list[0] == "config":
-        return _dispatch(_cmd_config, argparse.Namespace())
+        cfg_args = build_config_parser().parse_args(args_list[1:])
+        return _dispatch(_cmd_config, cfg_args)
 
     if args_list and args_list[0] == "rec-daemon":
         from voice2note.rec_daemon.cli import run_rec_daemon_cli

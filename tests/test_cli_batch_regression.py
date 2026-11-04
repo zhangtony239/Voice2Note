@@ -1,4 +1,4 @@
-"""回归测试：验证现有批处理 `v2n START-END [TITLE]` 与 `v2n config` 行为不因 `rec-daemon` 改动而变化。"""
+"""回归测试：验证现有批处理 `v2n START-END [TITLE]`、`v2n config` 与各级 `--help` 行为。"""
 
 from __future__ import annotations
 
@@ -41,6 +41,15 @@ def test_v2n_config_only_touches_config_yaml(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    # `v2n config --help` 只打印帮助，不创建文件
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["config", "--help"])
+    assert exc_info.value.code == 0
+    help_out = capsys.readouterr().out
+    assert "config.yaml" in help_out
+    assert not (tmp_path / CONFIG_FILE_NAME).exists()
+
+    # `v2n config` 创建并打印 config.yaml，不触碰 rec-daemon.yaml
     rc = cli.main(["config"])
     assert rc == 0
     out = capsys.readouterr().out
@@ -50,7 +59,18 @@ def test_v2n_config_only_touches_config_yaml(
     assert not (tmp_path / "rec-daemon.yaml").exists()
 
 
-def test_rec_daemon_help_subcommands(capsys: pytest.CaptureFixture[str]) -> None:
+def test_all_cli_help_outputs(capsys: pytest.CaptureFixture[str]) -> None:
+    # 顶层 `v2n --help` 包含批处理、config 与 rec-daemon 的完整引导
+    with pytest.raises(SystemExit) as exc_top:
+        cli.main(["--help"])
+    assert exc_top.value.code == 0
+    top_out = capsys.readouterr().out
+    assert "START-END" in top_out
+    assert "v2n config" in top_out
+    assert "v2n rec-daemon" in top_out
+    assert "init-config" in top_out
+    assert "token" in top_out
+
     for argv in (
         ["rec-daemon", "--help"],
         ["rec-daemon", "init-config", "--help"],

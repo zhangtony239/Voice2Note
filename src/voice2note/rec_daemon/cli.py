@@ -11,31 +11,15 @@ from pathlib import Path
 def build_init_config_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="v2n rec-daemon init-config",
-        description="从模板创建 rec-daemon.yaml 并打印其绝对路径。",
-    )
-    parser.add_argument(
-        "--config",
-        type=Path,
-        default=None,
-        metavar="PATH",
-        help="配置文件路径（默认当前目录下的 rec-daemon.yaml）",
-    )
-    return parser
-
-
-def build_token_parser() -> argparse.ArgumentParser:
-    return argparse.ArgumentParser(
-        prog="v2n rec-daemon token",
-        description="生成新的连接 token、其 SHA-256 摘要与会话密钥（只打印，不修改文件）。",
-    )
-
-
-def build_rec_daemon_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="v2n rec-daemon",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
-            "Voice2Note 远程识别常驻服务。子命令：init-config、token；"
-            "不带子命令时在前台启动 HTTP 控制面与任务轮询。"
+            "从内置模板创建远程识别服务配置文件 rec-daemon.yaml（保留注释）并打印其绝对路径。\n"
+            "若目标文件已存在，则只打印绝对路径而不覆盖现有文件。"
+        ),
+        epilog=(
+            "示例：\n"
+            "  v2n rec-daemon init-config\n"
+            "  v2n rec-daemon init-config --config C:\\work\\rec-daemon.yaml"
         ),
     )
     parser.add_argument(
@@ -43,28 +27,74 @@ def build_rec_daemon_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         metavar="PATH",
-        help="rec-daemon.yaml 配置文件路径（默认当前目录下的 rec-daemon.yaml）",
+        help="配置文件路径（默认当前工作目录下的 rec-daemon.yaml）",
+    )
+    return parser
+
+
+def build_token_parser() -> argparse.ArgumentParser:
+    return argparse.ArgumentParser(
+        prog="v2n rec-daemon token",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "生成新的 256 位连接 token（CONNECTION_TOKEN）、其 SHA-256 摘要（SERVER_AUTH_TOKEN_HASH）\n"
+            "以及会话派生密钥（SESSION_TOKEN_SECRET）。只输出到终端，不修改任何文件。"
+        ),
+        epilog=(
+            "用法说明：\n"
+            "  1. 将输出的 CONNECTION_TOKEN 填入手机端 RecNote 远程连接设置；\n"
+            "  2. 将输出的 SERVER_AUTH_TOKEN_HASH 与 SESSION_TOKEN_SECRET 填入电脑端 rec-daemon.yaml。"
+        ),
+    )
+
+
+def build_rec_daemon_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="v2n rec-daemon",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Voice2Note 面向手机端 RecNote 的远程语音识别常驻服务。\n"
+            "不带子命令时加载 rec-daemon.yaml，恢复未完成任务并在前台运行 HTTP 控制面与云盘轮询。\n"
+            "本服务仅执行 ASR 识别并将原稿写回云盘，不调用大模型、不生成笔记。"
+        ),
+        epilog=(
+            "快速上手流程：\n"
+            "  1. 生成服务配置模板：  v2n rec-daemon init-config --config rec-daemon.yaml\n"
+            "  2. 生成鉴权凭据与密钥：v2n rec-daemon token\n"
+            "  3. 编辑 rec-daemon.yaml 填入凭据与本机 OpenList WebDAV 地址及账号密码\n"
+            "  4. 在前台启动常驻服务：v2n rec-daemon --config rec-daemon.yaml\n"
+            "\n"
+            "命令行覆盖示例：\n"
+            "  v2n rec-daemon --config C:\\work\\rec-daemon.yaml --host 127.0.0.1 --port 8765 --log-level DEBUG"
+        ),
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="rec-daemon.yaml 配置文件路径（默认当前工作目录下的 rec-daemon.yaml）",
     )
     parser.add_argument(
         "--host",
         type=str,
         default=None,
         metavar="HOST",
-        help="覆盖配置中的 SERVER_HOST",
+        help="覆盖配置中的 SERVER_HOST（例如 127.0.0.1）",
     )
     parser.add_argument(
         "--port",
         type=int,
         default=None,
         metavar="PORT",
-        help="覆盖配置中的 SERVER_PORT",
+        help="覆盖配置中的 SERVER_PORT（1-65535，例如 8765）",
     )
     parser.add_argument(
         "--log-level",
         type=str,
         default=None,
         metavar="LEVEL",
-        help="覆盖配置中的 LOG_LEVEL（DEBUG/INFO/WARNING/ERROR）",
+        help="覆盖配置中的 LOG_LEVEL（可选值：DEBUG | INFO | WARNING | ERROR）",
     )
     subparsers = parser.add_subparsers(
         title="subcommands",
@@ -81,11 +111,11 @@ def build_rec_daemon_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         metavar="PATH",
-        help="配置文件路径（默认当前目录下的 rec-daemon.yaml）",
+        help="配置文件路径（默认当前工作目录下的 rec-daemon.yaml）",
     )
     subparsers.add_parser(
         "token",
-        help="生成新的连接 token、其摘要与会话密钥",
+        help="生成新的连接 token、其 SHA-256 摘要与会话密钥（只打印，不改文件）",
         description="生成新的连接 token、其 SHA-256 摘要与会话密钥（只打印，不修改文件）。",
     )
     return parser
