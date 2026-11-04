@@ -11,8 +11,27 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Protocol
 
 from voice2note.config import Config
+
+
+class AsrSettings(Protocol):
+    """ASR 转写所需的最小设置集合（仅三个字段，批处理 Config 与服务 DaemonConfig 均满足）。"""
+
+    @property
+    def torch_backend(self) -> str: ...
+
+    @property
+    def disable_mmap(self) -> bool: ...
+
+    @property
+    def asr_language(self) -> str: ...
+
+
+def is_model_loaded() -> bool:
+    """返回进程内 ASR 模型单例是否已加载。"""
+    return _model is not None
 
 MODEL_ID = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
 MODEL_REVISION = "d93b302ee7fd505e1b3576120fc142fc6f7820e1"
@@ -52,7 +71,7 @@ _processor = None
 _model = None
 
 
-def _load(config: Config):
+def _load(config: AsrSettings):
     """懒加载模型（进程内单例），避免 `v2n config` 等轻量命令导入 torch。"""
     global _processor, _model
     if _model is None:
@@ -219,7 +238,7 @@ def _join_transcripts(parts: list[str], language: str) -> str:
     return glue.join(part.strip() for part in parts if part.strip())
 
 
-def _transcribe_array(audio, config: Config) -> str:
+def _transcribe_array(audio, config: AsrSettings) -> str:
     """转写单段音频数组。"""
     import torch
 
@@ -244,7 +263,7 @@ def _transcribe_array(audio, config: Config) -> str:
     return processor.batch_decode(new_tokens, skip_special_tokens=True)[0]
 
 
-def transcribe(audio_path: Path, config: Config, progress_factory=None) -> str:
+def transcribe(audio_path: Path, config: AsrSettings, progress_factory=None) -> str:
     """将单个音频文件转写为 STT 原稿文本（全程语句切分）。
 
     ``progress_factory(total) -> 更新对象``：语句多于一条时用于 tqdm 进度。

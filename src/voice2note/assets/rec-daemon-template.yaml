@@ -1,0 +1,83 @@
+# Voice2Note 远程识别常驻服务 (v2n rec-daemon) 配置文件
+# 本文件与批处理命令使用的 config.yaml 完全独立，不含任何大模型（LLM）配置。
+# 除 DISABLE_MMAP 外，其余 21 个字段均为必填项；相对路径按本配置文件所在目录解析。
+
+# ---- 识别（ASR）----
+
+# 计算后端，仅允许：xpu | cuda
+TORCH_BACKEND: xpu
+
+# 语音识别语言，例如：zh / en
+ASR_LANGUAGE: zh
+
+# 是否禁用 mmap 加载模型权重（可选；注释或留空时按 TORCH_BACKEND 推导：xpu->true, cuda->false）
+# DISABLE_MMAP: true
+
+# ---- 监听与鉴权 ----
+
+# HTTP 控制面监听地址（建议仅监听本机回环，由 cloudflared 转发）
+SERVER_HOST: 127.0.0.1
+
+# HTTP 控制面监听端口（1-65535）
+SERVER_PORT: 8765
+
+# 连接 token 的 SHA-256 摘要，格式固定为 sha256:<64位小写十六进制>
+# 请运行 `v2n rec-daemon token` 生成后填入
+SERVER_AUTH_TOKEN_HASH: ""
+
+# 任务 token 派生密钥（HMAC-SHA256 密钥，长度至少 32 个字符）
+# 请运行 `v2n rec-daemon token` 生成后填入
+SESSION_TOKEN_SECRET: ""
+
+# ---- 云盘（本机 OpenList WebDAV）----
+
+# OpenList WebDAV 根地址（例如 http://127.0.0.1:5244/dav）
+OPENLIST_WEBDAV_URL: "http://127.0.0.1:5244/dav"
+
+# OpenList WebDAV 用户名
+OPENLIST_USERNAME: ""
+
+# OpenList WebDAV 密码
+OPENLIST_PASSWORD: ""
+
+# WebDAV 单次请求超时秒数（正整数）
+OPENLIST_TIMEOUT_SECONDS: 30
+
+# 是否校验证书（布尔值 true | false）
+OPENLIST_VERIFY_TLS: true
+
+# 双端约定的云盘任务根目录前缀（相对云盘根，不含首尾斜杠）
+CLOUD_ROOT_PREFIX: RecNoteRemote
+
+# ---- 存储（相对路径按本配置文件所在目录解析）----
+
+# 任务状态文件保存目录（存放 <session_id>.json）
+SESSION_STATE_PATH: .rec-daemon/state
+
+# 任务本地工作目录（存放下载的音频块与本地原稿）
+SESSION_WORK_PATH: .rec-daemon/work
+
+# ---- 调度 ----
+
+# 初始轮询间隔秒数（正整数）
+POLL_INTERVAL_SECONDS: 2
+
+# 无变化时指数退避的最大轮询间隔秒数（正整数，且 >= POLL_INTERVAL_SECONDS）
+POLL_MAX_INTERVAL_SECONDS: 30
+
+# 识别并发上限（模型进程内单例串行推理，必须固定为 1）
+ASR_MAX_CONCURRENCY: 1
+
+# 同时活动的最大任务数（正整数）
+MAX_ACTIVE_SESSIONS: 5
+
+# ---- 保护与诊断 ----
+
+# 单个音频块允许下载的最大字节数（正整数，默认 16 MiB）
+MAX_AUDIO_CHUNK_BYTES: 16777216
+
+# 任务空闲告警小时数（正整数；仅打印告警日志，不改变任务状态）
+SESSION_IDLE_WARN_HOURS: 4
+
+# 日志级别：DEBUG | INFO | WARNING | ERROR
+LOG_LEVEL: INFO

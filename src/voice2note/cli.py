@@ -119,6 +119,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args_list and args_list[0] == "config":
         return _dispatch(_cmd_config, argparse.Namespace())
 
+    if args_list and args_list[0] == "rec-daemon":
+        from voice2note.rec_daemon.cli import run_rec_daemon_cli
+
+        return run_rec_daemon_cli(args_list[1:])
+
     parser = build_parser()
     args = parser.parse_args(args_list)
     return _dispatch(_cmd_run, args)
